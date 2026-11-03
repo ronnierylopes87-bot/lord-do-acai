@@ -1,4 +1,4 @@
-name: Gerar APK Android
+name: Gerar APK Android Assinado
 
 on:
   workflow_dispatch:
@@ -6,6 +6,9 @@ on:
     paths:
       - "capacitor.config.json"
       - ".github/workflows/android-apk.yml"
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -28,20 +31,82 @@ jobs:
 
       - name: Preparar Capacitor
         run: |
-          npm install @capacitor/core @capacitor/android @capacitor/cli
+          npm init -y
+          npm install --no-audit --no-fund @capacitor/core @capacitor/android @capacitor/cli
           mkdir -p www
           echo '<html><body>Lord do Açaí</body></html>' > www/index.html
           npx cap add android
+
+      - name: Preparar assinatura
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/lord-do-acai-release.jks"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          p = Path("android/keystore.properties")
+          p.write_text(
+              "storeFile=" + os.environ["RUNNER_TEMP"] + "/lord-do-acai-release.jks\n" +
+              "storePassword=" + os.environ["KEYSTORE_PASSWORD"] + "\n" +
+              "keyAlias=" + os.environ["KEY_ALIAS"] + "\n" +
+              "keyPassword=" + os.environ["KEY_PASSWORD"] + "\n"
+          )
+          p.chmod(0o600)
+
+          gradle = Path("android/app/build.gradle")
+          s = gradle.read_text()
+          loader = '''
+          def keystoreProperties = new Properties()
+          def keystorePropertiesFile = rootProject.file("keystore.properties")
+          if (keystorePropertiesFile.exists()) {
+              keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+          }
+
+          '''
+          if "def keystoreProperties =" not in s:
+              s = loader + s
+          signing = '''
+              signingConfigs {
+                  release {
+                      storeFile file(keystoreProperties['storeFile'])
+                      storePassword keystoreProperties['storePassword']
+                      keyAlias keystoreProperties['keyAlias']
+                      keyPassword keystoreProperties['keyPassword']
+                  }
+              }
+
+          '''
+          if "signingConfigs {" not in s:
+              s = s.replace("    buildTypes {", signing + "    buildTypes {", 1)
+          if "signingConfig signingConfigs.release" not in s:
+              import re
+              s, count = re.subn(
+                  r'(buildTypes\\s*\\{\\s*release\\s*\\{)',
+                  r'\\1\n            signingConfig signingConfigs.release',
+                  s,
+                  count=1
+              )
+              if count != 1:
+                  raise SystemExit("Não foi possível configurar a assinatura.")
+          gradle.write_text(s)
+          PY
 
       - name: Gerar APK
         run: |
           npx cap sync android
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
 
-      - name: Disponibilizar APK
+      - name: Disponibilizar APK assinado
         uses: actions/upload-artifact@v4
         with:
-          name: Lord-do-Acai-APK-teste
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Lord-do-Acai-APK-ASSINADO
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 7
