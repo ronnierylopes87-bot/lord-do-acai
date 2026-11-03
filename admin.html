@@ -6,104 +6,189 @@
 <title>Painel Administrativo - Lord do Açaí</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
-body{font:16px Arial;background:#faf7fc;color:#25152d;margin:0;padding:20px}
-main{max-width:850px;margin:auto}
-input,button{padding:13px;margin:6px 0;width:100%;box-sizing:border-box}
-button{background:#64208c;color:white;border:0;border-radius:8px;font-weight:bold}
-pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;padding:15px;border-radius:8px}
+:root{--p:#64208c;--pink:#ed4caa;--bg:#faf7fc;--ink:#25152d}
+*{box-sizing:border-box}
+body{margin:0;padding:16px;font:16px Arial,sans-serif;background:var(--bg);color:var(--ink)}
+main{max-width:980px;margin:auto}
+h1{color:var(--p);margin:8px 0 20px}
+input,button{font:inherit;padding:13px;border-radius:9px;width:100%;box-sizing:border-box}
+input{border:1px solid #d9cde0;margin:7px 0}
+button{border:0;background:var(--p);color:white;font-weight:bold;cursor:pointer;margin:5px 0}
+button.secondary{background:#765b83}
+button.whatsapp{background:#16834a}
+button:disabled{opacity:.55;cursor:wait}
+.panel{background:white;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 2px 12px #32104412}
+.order{background:white;border:1px solid #e8ddec;border-radius:14px;padding:15px;margin:14px 0;box-shadow:0 2px 10px #3210440d}
+.top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
+.order h3{margin:0;color:var(--p)}
+.total{font-size:22px;font-weight:bold;color:var(--p)}
+.muted{color:#705f78;font-size:14px}
+.items{background:#faf7fc;border-radius:9px;padding:10px;margin:10px 0}
+.item{padding:6px 0;border-bottom:1px solid #eee}
+.item:last-child{border:0}
+.status{display:inline-block;border-radius:20px;padding:6px 10px;background:#f2e7f8;color:var(--p);font-size:13px;font-weight:bold}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.actions button{font-size:14px;padding:11px;margin:0}
+#msg{color:var(--p);font-size:14px;white-space:pre-wrap}
+#orders:empty:before{content:"Nenhum pedido carregado.";color:#705f78}
+a{color:var(--p)}
+@media(max-width:520px){body{padding:10px}.actions{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <main>
-<h1>Lord do Açaí — Painel</h1>
+<h1>🍧 Lord do Açaí — Painel</h1>
 
-<section id="login">
+<section id="login" class="panel">
 <h2>Entrar como administrador</h2>
-<input id="email" type="email" placeholder="E-mail">
-<input id="password" type="password" placeholder="Senha">
-<button onclick="entrar()">Entrar</button>
-<p id="msg"></p>
+<input id="email" type="email" autocomplete="username" placeholder="E-mail do administrador">
+<input id="password" type="password" autocomplete="current-password" placeholder="Senha">
+<button id="loginBtn" onclick="entrar()">Entrar</button>
+<p id="msg" role="status"></p>
 </section>
 
 <section id="painel" hidden>
-<h2>Pedidos recentes</h2>
-<button onclick="carregar()">Atualizar pedidos</button>
-<button onclick="sair()">Sair</button>
-<pre id="out">Carregando...</pre>
+<div class="panel">
+<div class="top">
+  <div><h2 style="margin:0">Pedidos recentes</h2><span class="muted">Acompanhe e atualize os pedidos da loja.</span></div>
+  <div style="min-width:130px"><button onclick="carregar()">↻ Atualizar</button><button class="secondary" onclick="sair()">Sair</button></div>
+</div>
+<p id="feedback" class="muted" aria-live="polite"></p>
+</div>
+<div id="orders"></div>
 </section>
-
-<p><a href="/">Voltar à loja</a></p>
+<p><a href="/">← Voltar à loja</a></p>
 </main>
 
 <script>
+const ADMIN_EMAIL = "lorddoacaiodc@gmail.com";
 const db = supabase.createClient(
   "https://cfnpqmvuaoeqtizqwsxf.supabase.co",
   "sb_publishable_rpRQ9ll8jN9_AE68UhA_TQ_fHe_yG8s",
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true
-    }
-  }
+  {auth:{persistSession:true,autoRefreshToken:true}}
 );
+
+const brl = v => Number(v || 0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const statusNames = {
+  recebido:"Recebido",
+  preparando:"Em preparação",
+  saiu_para_entrega:"Saiu para entrega",
+  entregue:"Entregue",
+  cancelado:"Cancelado"
+};
+const dateBR = s => s ? new Date(s).toLocaleString("pt-BR") : "Data não informada";
 
 async function entrar(){
   const msg=document.querySelector("#msg");
-  msg.textContent="Verificando acesso...";
+  const btn=document.querySelector("#loginBtn");
+  btn.disabled=true; msg.textContent="Verificando acesso...";
   const {data,error}=await db.auth.signInWithPassword({
-    email:document.querySelector("#email").value,
+    email:document.querySelector("#email").value.trim(),
     password:document.querySelector("#password").value
   });
-  if(error){
-    msg.textContent="Erro no login: "+error.message;
-    return;
-  }
-  if(data.user.email!=="lorddoacai@gmail.com" &&
-     data.user.email!=="lorddoacaiodc@gmail.com"){
+  btn.disabled=false;
+  if(error){msg.textContent="Não foi possível entrar. Confira o e-mail e a senha.";return;}
+  if((data.user.email||"").toLowerCase()!==ADMIN_EMAIL){
     await db.auth.signOut();
-    msg.textContent="E-mail sem permissão de administrador.";
+    msg.textContent="Este e-mail não tem permissão de administrador.";
     return;
   }
-  mostrarPainel();
-}
-
-async function mostrarPainel(){
   document.querySelector("#login").hidden=true;
   document.querySelector("#painel").hidden=false;
   carregar();
 }
 
+async function tokenAtual(){
+  const {data,error}=await db.auth.getSession();
+  if(error || !data.session) throw new Error("Sua sessão expirou. Entre novamente.");
+  return data.session.access_token;
+}
+
 async function carregar(){
-  const out=document.querySelector("#out");
-  out.textContent="Carregando pedidos...";
-  const {data}=await db.auth.getSession();
-  const token=data.session?.access_token;
-  if(!token){
-    out.textContent="Faça login novamente.";
-    return;
-  }
+  const box=document.querySelector("#orders");
+  const feedback=document.querySelector("#feedback");
+  box.innerHTML='<div class="panel">Carregando pedidos...</div>';
+  feedback.textContent="";
   try{
+    const token=await tokenAtual();
+    const r=await fetch("/.netlify/functions/admin-orders",{headers:{Authorization:"Bearer "+token}});
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error||"Falha ao consultar pedidos.");
+    desenharPedidos(j.orders||[]);
+    feedback.textContent=(j.orders||[]).length+" pedido(s) listado(s).";
+  }catch(e){
+    box.innerHTML='<div class="panel">'+esc(e.message)+'</div>';
+    if(String(e.message).includes("sessão expirou")){await db.auth.signOut();mostrarLogin();}
+  }
+}
+
+function desenharPedidos(orders){
+  const box=document.querySelector("#orders");
+  if(!orders.length){box.innerHTML='<div class="panel">Ainda não há pedidos registrados.</div>';return;}
+  box.innerHTML=orders.map(o=>{
+    const items=(o.order_items||[]).map(i=>
+      '<div class="item"><strong>'+esc(i.quantity)+' × '+esc(i.product_name)+'</strong><br><span class="muted">'+brl(i.unit_price)+' cada</span></div>'
+    ).join("");
+    const phone=String(o.phone||"").replace(/\D/g,"");
+    const wa=phone ? "https://wa.me/"+(phone.startsWith("55")?phone:"55"+phone) : "";
+    const status=statusNames[o.status]||o.status||"Não informado";
+    return '<article class="order">'+
+      '<div class="top"><h3>Pedido #'+esc(String(o.id).slice(0,8).toUpperCase())+'</h3><span class="status">'+esc(status)+'</span></div>'+
+      '<p><strong>Cliente:</strong> '+esc(o.customer_name)+'</p>'+
+      '<p><strong>Telefone:</strong> '+esc(o.phone)+'</p>'+
+      '<p><strong>Endereço:</strong> '+esc(o.address)+'</p>'+
+      '<div class="items"><strong>Itens do pedido</strong>'+items+'</div>'+
+      '<p><strong>Pagamento:</strong> '+esc(o.payment_method)+'</p>'+
+      '<div class="top"><span class="muted">'+esc(dateBR(o.created_at))+'</span><span class="total">'+brl(o.total)+'</span></div>'+
+      (wa?'<button class="whatsapp" onclick="abrirWhatsApp(\''+esc(wa)+'\')">Conversar pelo WhatsApp</button>':'')+
+      '<div class="actions">'+
+      '<button onclick="mudarStatus(\''+esc(o.id)+'\',\'preparando\',this)">Preparando</button>'+
+      '<button onclick="mudarStatus(\''+esc(o.id)+'\',\'saiu_para_entrega\',this)">Saiu para entrega</button>'+
+      '<button onclick="mudarStatus(\''+esc(o.id)+'\',\'entregue\',this)">Entregue</button>'+
+      '<button class="secondary" onclick="mudarStatus(\''+esc(o.id)+'\',\'cancelado\',this)">Cancelar pedido</button>'+
+      '</div></article>';
+  }).join("");
+}
+
+function abrirWhatsApp(url){window.open(url,"_blank","noopener");}
+
+async function mudarStatus(id,status,btn){
+  const feedback=document.querySelector("#feedback");
+  const old=btn.textContent;btn.disabled=true;btn.textContent="Salvando...";
+  try{
+    const token=await tokenAtual();
     const r=await fetch("/.netlify/functions/admin-orders",{
-      headers:{Authorization:"Bearer "+token}
+      method:"PATCH",
+      headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},
+      body:JSON.stringify({order_id:id,status})
     });
     const j=await r.json();
-    if(!r.ok)throw Error(j.error||"Falha ao consultar pedidos");
-    out.textContent=JSON.stringify(j.orders,null,2);
-  }catch(e){
-    out.textContent=e.message;
-  }
+    if(!r.ok)throw new Error(j.error||"Não foi possível atualizar.");
+    feedback.textContent="Status atualizado: "+(statusNames[status]||status)+".";
+    await carregar();
+  }catch(e){feedback.textContent=e.message;btn.disabled=false;btn.textContent=old;}
 }
 
-async function sair(){
-  await db.auth.signOut();
+function mostrarLogin(){
   document.querySelector("#painel").hidden=true;
   document.querySelector("#login").hidden=false;
+}
+async function sair(){
+  await db.auth.signOut();
   document.querySelector("#password").value="";
   document.querySelector("#msg").textContent="Você saiu do painel.";
+  mostrarLogin();
 }
-
-db.auth.getSession().then(({data})=>{
-  if(data.session)mostrarPainel();
+db.auth.getSession().then(async ({data})=>{
+  if(data.session){
+    const {data:userData}=await db.auth.getUser();
+    if((userData.user?.email||"").toLowerCase()===ADMIN_EMAIL){
+      document.querySelector("#login").hidden=true;
+      document.querySelector("#painel").hidden=false;
+      carregar();
+    }else{await db.auth.signOut();}
+  }
 });
 </script>
 </body>
