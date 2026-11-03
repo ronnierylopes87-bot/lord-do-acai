@@ -18,7 +18,7 @@ const money=n=>Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'
 function draw(){
 document.querySelector('#products').innerHTML=products.map(p=>`
 <div class="product">
-${p.name.toLowerCase().includes('açaí')?'<img src="acai-garrafa.png" alt="Açaí na garrafa" style="width:100%;height:190px;object-fit:cover;border-radius:10px;">':''}
+${p.name.toLowerCase().includes('açaí')?'<img src="acai-garrafa.png" alt="Açaí na garrafa" style="width:100%;height:190px;object-fit:cover;border-radius:10px;">':p.name.toLowerCase().includes('bolo')?'<img src="bolo-no-pote.png" alt="Bolo no Pote: Chocolate, Ninho e Prestígio" style="width:100%;height:190px;object-fit:cover;border-radius:10px;">':''}
 <h3>${p.name}</h3>
 <p class="price">${money(p.price)}</p>
 <button type="button" onclick="add('${p.id}')">Adicionar</button>
