@@ -1,0 +1,47 @@
+name: Gerar APK Android
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "capacitor.config.json"
+      - ".github/workflows/android-apk.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Configurar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Preparar Capacitor
+        run: |
+          npm install @capacitor/core @capacitor/android @capacitor/cli
+          mkdir -p www
+          echo '<html><body>Lord do Açaí</body></html>' > www/index.html
+          npx cap add android
+
+      - name: Gerar APK
+        run: |
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lord-do-Acai-APK-teste
+          path: android/app/build/outputs/apk/debug/app-debug.apk
