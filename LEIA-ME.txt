@@ -1,0 +1,21 @@
+LORD DO ACAI - INTEGRACAO
+
+IMPORTANTE: este pacote contém uma versão simples da loja e funções Netlify.
+Ele não preserva automaticamente o design anterior. Antes de substituir arquivos existentes,
+confirme que você deseja usar esta versão.
+
+Arquivos para colocar na raiz do repositório:
+- index.html
+- admin.html
+- netlify.toml
+- package.json
+- pasta netlify/functions/
+
+No Supabase, execute migracao-pedidos.sql no SQL Editor.
+No Netlify, mantenha as variáveis privadas:
+SUPABASE_URL
+SUPABASE_SERVICE_ROLE_KEY
+
+A função usa as tabelas public.products, public.orders e public.order_items
+com os campos indicados no projeto. Teste primeiro com um pedido fictício.
+A chave service_role nunca deve ser colocada em arquivos do site ou no GitHub.
