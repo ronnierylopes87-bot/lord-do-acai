@@ -6,7 +6,6 @@ confirme que você deseja usar esta versão.
 
 Arquivos para colocar na raiz do repositório:
 - index.html
-- admin.html
 - netlify.toml
 - package.json
 - pasta netlify/functions/
