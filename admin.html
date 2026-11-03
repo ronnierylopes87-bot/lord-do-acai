@@ -1,1 +1,104 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin • Lord do Açaí</title></head><body style="font:16px Arial;max-width:900px;margin:30px auto;padding:0 16px"><h1>Lord do Açaí — Painel</h1><p>Esta página é uma área de consulta básica. Acesse o painel administrativo já configurado em seu projeto se ele estiver disponível.</p><p><a href="/">Voltar à loja</a></p><h2>Pedidos recentes</h2><button id="reload">Atualizar</button><pre id="out">Carregando...</pre><script>async function go(){let o=document.querySelector('#out');try{let r=await fetch('/.netlify/functions/admin-orders');let j=await r.json();if(!r.ok)throw Error(j.error||'Falha');o.textContent=JSON.stringify(j.orders,null,2)}catch(e){o.textContent=e.message}}document.querySelector('#reload').onclick=go;go()</script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painel Administrativo - Lord do Açaí</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+body{font:16px Arial;background:#faf7fc;color:#25152d;margin:0;padding:20px}
+main{max-width:850px;margin:auto}
+input,button{padding:13px;margin:6px 0;width:100%;box-sizing:border-box}
+button{background:#64208c;color:white;border:0;border-radius:8px;font-weight:bold}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;padding:15px;border-radius:8px}
+</style>
+</head>
+<body>
+<main>
+<h1>Lord do Açaí — Painel</h1>
+
+<section id="login">
+<h2>Entrar como administrador</h2>
+<input id="email" type="email" placeholder="E-mail">
+<input id="password" type="password" placeholder="Senha">
+<button onclick="entrar()">Entrar</button>
+<p id="msg"></p>
+</section>
+
+<section id="painel" hidden>
+<h2>Pedidos recentes</h2>
+<button onclick="carregar()">Atualizar pedidos</button>
+<button onclick="sair()">Sair</button>
+<pre id="out">Carregando...</pre>
+</section>
+
+<p><a href="/">Voltar à loja</a></p>
+</main>
+
+<script>
+const db = supabase.createClient(
+  "https://cfnpqmvuaoeqtizqwsxf.supabase.co",
+  "sb_publishable_rpRQ9ll8jN9_AE68UhA_TQ_fHe_yG8s"
+);
+
+async function entrar(){
+  const msg=document.querySelector("#msg");
+  msg.textContent="Verificando acesso...";
+  const {data,error}=await db.auth.signInWithPassword({
+    email:document.querySelector("#email").value,
+    password:document.querySelector("#password").value
+  });
+  if(error){
+    msg.textContent="Erro no login: "+error.message;
+    return;
+  }
+  if(data.user.email!=="lorddoacai@gmail.com" &&
+     data.user.email!=="lorddoacaiodc@gmail.com"){
+    await db.auth.signOut();
+    msg.textContent="E-mail sem permissão de administrador.";
+    return;
+  }
+  mostrarPainel();
+}
+
+async function mostrarPainel(){
+  document.querySelector("#login").hidden=true;
+  document.querySelector("#painel").hidden=false;
+  carregar();
+}
+
+async function carregar(){
+  const out=document.querySelector("#out");
+  out.textContent="Carregando pedidos...";
+  const {data}=await db.auth.getSession();
+  const token=data.session?.access_token;
+  if(!token){
+    out.textContent="Faça login novamente.";
+    return;
+  }
+  try{
+    const r=await fetch("/.netlify/functions/admin-orders",{
+      headers:{Authorization:"Bearer "+token}
+    });
+    const j=await r.json();
+    if(!r.ok)throw Error(j.error||"Falha ao consultar pedidos");
+    out.textContent=JSON.stringify(j.orders,null,2);
+  }catch(e){
+    out.textContent=e.message;
+  }
+}
+
+async function sair(){
+  await db.auth.signOut();
+  document.querySelector("#painel").hidden=true;
+  document.querySelector("#login").hidden=false;
+  document.querySelector("#password").value="";
+  document.querySelector("#msg").textContent="Você saiu do painel.";
+}
+
+db.auth.getSession().then(({data})=>{
+  if(data.session)mostrarPainel();
+});
+</script>
+</body>
+</html>
