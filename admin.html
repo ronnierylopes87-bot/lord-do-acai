@@ -38,7 +38,13 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;background:white;padding:15px;bo
 <script>
 const db = supabase.createClient(
   "https://cfnpqmvuaoeqtizqwsxf.supabase.co",
-  "sb_publishable_rpRQ9ll8jN9_AE68UhA_TQ_fHe_yG8s"
+  "sb_publishable_rpRQ9ll8jN9_AE68UhA_TQ_fHe_yG8s",
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true
+    }
+  }
 );
 
 async function entrar(){
