@@ -13,21 +13,148 @@
 <button type="submit">Enviar pedido</button><p><small>Pix antecipado: lorddoacaiodc@gmail.com. Envie o comprovante pelo WhatsApp após concluir.</small></p>
 </form><p id="msg"></p></section></main>
 <script>
-const cart=[];let products=[];
-const money=n=>Number(n).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const cart=[];
+let products=[];
+
+const money=n=>Number(n).toLocaleString('pt-BR',{
+  style:'currency',
+  currency:'BRL'
+});
+
 function draw(){
-document.querySelector('#products').innerHTML=products.map(p=>`
-<div class="product">
-${p.name.toLowerCase().includes('açaí')?'<img src="acai-garrafa.png" alt="Açaí na garrafa" style="width:100%;height:190px;object-fit:cover;border-radius:10px;">':p.name.toLowerCase().includes('bolo')?'<img src="bolo-no-pote.png" alt="Bolo no Pote: Chocolate, Ninho e Prestígio" style="width:100%;height:190px;object-fit:cover;border-radius:10px;">':''}
-<h3>${p.name}</h3>
-<p class="price">${money(p.price)}</p>
-<button type="button" onclick="add('${p.id}')">Adicionar</button>
-</div>`).join('')||'Nenhum produto disponível.';
-document.querySelector('#cart').innerHTML=cart.length?cart.map(x=>`${x.name} × ${x.quantity} — ${money(x.price*x.quantity)}`).join('<br>')+'<hr><b>Total: '+money(cart.reduce((s,x)=>s+x.price*x.quantity,0))+'</b>':'Nenhum item adicionado.'
+  document.querySelector('#products').innerHTML=products.map(p=>`
+    <div class="product">
+      ${p.name.toLowerCase().includes('açaí')
+        ? '<img src="acai-garrafa.png" alt="Açaí na garrafa" style="width:100%;height:190px;object-fit:cover;border-radius:10px;">'
+        : p.name.toLowerCase().includes('bolo')
+        ? '<img src="bolo-no-pote.png" alt="Bolo no Pote" style="width:100%;height:190px;object-fit:cover;border-radius:10px;">'
+        : ''}
+      <h3>${p.name}</h3>
+      <p class="price">${money(p.price)}</p>
+
+      ${p.name.toLowerCase().includes('bolo') ? `
+        <label>Escolha o sabor:</label>
+        <select id="sabor-${p.id}">
+          <option value="">Selecione</option>
+          <option value="Chocolate">Chocolate</option>
+          <option value="Ninho">Ninho</option>
+          <option value="Prestígio">Prestígio</option>
+        </select>
+      ` : ''}
+
+      <button type="button" onclick="add('${p.id}')">Adicionar</button>
+    </div>
+  `).join('') || 'Nenhum produto disponível.';
+
+  document.querySelector('#cart').innerHTML=cart.length
+    ? cart.map(x=>`${x.name}${x.flavor?' - '+x.flavor:''} × ${x.quantity} — ${money(x.price*x.quantity)}`).join('<br>')+
+      '<hr><b>Total: '+money(cart.reduce((s,x)=>s+x.price*x.quantity,0))+'</b>'
+    : 'Nenhum item adicionado.';
 }
-function add(id){let p=products.find(x=>x.id===id),i=cart.find(x=>x.id===id);if(i)i.quantity++;else cart.push({id:p.id,name:p.name,price:Number(p.price),quantity:1});draw()}
-async function load(){try{let r=await fetch('/.netlify/functions/products');let j=await r.json();products=j.products||[]}catch(e){products=[]}draw()}
-document.querySelector('#checkout').addEventListener('submit',async e=>{e.preventDefault();if(!cart.length){alert('Adicione um produto.');return}let f=new FormData(e.target),body={customer_name:f.get('customer_name'),phone:f.get('phone'),address:f.get('address'),payment_method:f.get('payment_method'),items:cart.map(x=>({product_id:x.id,quantity:x.quantity}))};let m=document.querySelector('#msg');m.textContent='Enviando pedido...';try{let r=await fetch('/.netlify/functions/create-order',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});let j=await r.json();if(!r.ok)throw Error(j.error||'Não foi possível enviar');m.textContent='Pedido recebido! Número: '+j.order_id+'. Confirme pelo WhatsApp.';let text=encodeURIComponent(`Olá, fiz o pedido ${j.order_id} na Lord do Açaí. Nome: ${body.customer_name}. Pagamento: ${body.payment_method}.`);window.open('https://wa.me/5598981221085?text='+text,'_blank');cart.length=0;draw();e.target.reset()}catch(err){m.textContent='Erro: '+err.message}}
-);
+
+function add(id){
+  const p=products.find(x=>String(x.id)===String(id));
+  if(!p)return;
+
+  let flavor='';
+
+  if(p.name.toLowerCase().includes('bolo')){
+    const select=document.querySelector('#sabor-'+p.id);
+    flavor=select ? select.value : '';
+
+    if(!flavor){
+      alert('Escolha o sabor do Bolo no Pote.');
+      return;
+    }
+  }
+
+  const i=cart.find(x=>
+    String(x.id)===String(id) && x.flavor===flavor
+  );
+
+  if(i){
+    i.quantity++;
+  }else{
+    cart.push({
+      id:p.id,
+      name:p.name,
+      price:Number(p.price),
+      quantity:1,
+      flavor
+    });
+  }
+
+  draw();
+}
+
+async function load(){
+  try{
+    const r=await fetch('/.netlify/functions/products');
+    const j=await r.json();
+    products=j.products||[];
+  }catch(e){
+    products=[];
+  }
+  draw();
+}
+
+document.querySelector('#checkout').addEventListener('submit',async e=>{
+  e.preventDefault();
+
+  if(!cart.length){
+    alert('Adicione um produto.');
+    return;
+  }
+
+  const f=new FormData(e.target);
+
+  const body={
+    customer_name:f.get('customer_name'),
+    phone:f.get('phone'),
+    address:f.get('address'),
+    payment_method:f.get('payment_method'),
+    items:cart.map(x=>({
+      product_id:x.id,
+      quantity:x.quantity,
+      flavor:x.flavor
+    }))
+  };
+
+  const m=document.querySelector('#msg');
+  m.textContent='Enviando pedido...';
+
+  try{
+    const r=await fetch('/.netlify/functions/create-order',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)
+    });
+
+    const j=await r.json();
+
+    if(!r.ok)throw Error(j.error||'Não foi possível enviar');
+
+    m.textContent='Pedido recebido! Número: '+j.order_id+'. Confirme pelo WhatsApp.';
+
+    const resumo=cart.map(x=>
+      `${x.name}${x.flavor?' - '+x.flavor:''} x ${x.quantity}`
+    ).join(', ');
+
+    const text=encodeURIComponent(
+      `Olá, fiz o pedido ${j.order_id} na Lord do Açaí. Nome: ${body.customer_name}. Itens: ${resumo}. Pagamento: ${body.payment_method}.`
+    );
+
+    window.open('https://wa.me/5598981221085?text='+text,'_blank');
+
+    cart.length=0;
+    draw();
+    e.target.reset();
+
+  }catch(err){
+    m.textContent='Erro: '+err.message;
+  }
+});
+
 load();
-</script></body></html>
+</script>
+</body></html>
