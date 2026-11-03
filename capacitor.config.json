@@ -1,0 +1,9 @@
+{
+  "appId": "com.lorddoacai.app",
+  "appName": "Lord do Açaí",
+  "webDir": "www",
+  "server": {
+    "url": "https://lorddoacaiodc.netlify.app",
+    "cleartext": false
+  }
+}
